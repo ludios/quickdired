@@ -1,5 +1,11 @@
+import sys
 import os
 import re
+
+try:
+	from simplejson import json
+except ImportError:
+	import json
 
 from twisted.python.filepath import FilePath
 
@@ -57,22 +63,51 @@ def getNamesFromContent(s):
 
 
 def shouldInclude(name):
-	return name not in set([".quickdired.oldnames", ".quickdired.newnames"])
+	return name not in set([
+		u".quickdired.oldnames",
+		u".quickdired.newnames",
+		u".quickdired.options",
+	])
 
 
-def main():
+def withoutBase(root, fp):
+	return fp.path.replace(root.path, u"", 1).lstrip(u"/\\")
+
+
+def getListing(root, deep):
+	if not deep:
+		return sortNicely(filter(shouldInclude, os.listdir(root.path)))
+	else:
+		return sortNicely(map(
+			lambda fp: withoutBase(root, fp),
+			filter(
+				# --deep does not support renaming directories
+				lambda fp: not fp.isdir() and shouldInclude(fp.basename()),
+				root.walk()
+			)))
+
+
+def writeListingOrRename(deep): # Note: deep may be changed below
 	f = upgradeFilepath(FilePath(os.getcwdu()))
-	listingNames = sortNicely(filter(shouldInclude, os.listdir(f.path)))
 
-	oldNamesFile = f.child(".quickdired.oldnames")
-	newNamesFile = f.child(".quickdired.newnames")
+	oldNamesFile = f.child(u".quickdired.oldnames")
+	newNamesFile = f.child(u".quickdired.newnames")
+	optionsFile = f.child(u".quickdired.options")
 
-	if oldNamesFile.isfile() and newNamesFile.isfile():
+	if oldNamesFile.isfile() and newNamesFile.isfile() and optionsFile.isfile():
 		# If both files exist, rename the files in current dir
 		oldNames = getNamesFromContent(oldNamesFile.getContent())
 		newNames = getNamesFromContent(newNamesFile.getContent())
-		
+		options = json.loads(optionsFile.getContent())
+		if options['deep']:
+			# Even if no --deep, assume deep if .options says deep: true
+			deep = True
+
+		listingNames = getListing(f, deep)
+
 		if set(oldNames) != set(listingNames):
+			print "old names = ", oldNames
+			print "cur names = ", listingNames
 			showError("Files in directory do not match .oldnames")
 			return
 		if len(oldNames) != len(newNames):
@@ -82,13 +117,28 @@ def main():
 		for i, o in enumerate(oldNames):
 			os.rename(o, newNames[i])
 		
+		optionsFile.remove()
 		oldNamesFile.remove()
 		newNamesFile.remove()
 	else:
+		listingNames = getListing(f, deep)
+
 		# Create the .oldnames and .newnames files, which the
 		# user should edit, and then re-run quickdired.
 		oldNamesFile.setContent("\n".join(map(utf8, listingNames)) + "\n")
 		newNamesFile.setContent("\n".join(map(utf8, listingNames)) + "\n")
+		optionsFile.setContent(json.dumps({"deep": deep}, indent=2))
+
+		# Associate .newnames with whatever text editor you want
+		os.startfile(u".quickdired.newnames")
+
+
+def main():
+	try:
+		deep = sys.argv[1] == '--deep'
+	except IndexError:
+		deep = False
+	writeListingOrRename(deep)
 
 
 if __name__ == '__main__':
