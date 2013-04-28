@@ -87,6 +87,13 @@ def getListing(root, deep):
 			)))
 
 
+def tryMakedirs(f):
+	try:
+		os.makedirs(f)
+	except OSError:
+		pass
+
+
 def writeListingOrRename(deep): # Note: deep may be changed below
 	f = upgradeFilepath(FilePath(os.getcwdu()))
 
@@ -114,8 +121,11 @@ def writeListingOrRename(deep): # Note: deep may be changed below
 			showError(".newnames lists %r names while .oldnames lists %r names" % (len(newNames), len(oldNames)))
 			return
 
-		for i, o in enumerate(oldNames):
-			os.rename(o, newNames[i])
+		for i, oldName in enumerate(oldNames):
+			newName = newNames[i]
+			if '/' in newName:
+				tryMakedirs(newName.rsplit('/', 1)[0])
+			os.rename(oldName, newName)
 		
 		optionsFile.remove()
 		oldNamesFile.remove()
