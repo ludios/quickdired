@@ -59,18 +59,23 @@ def sortNicely(l):
 	return sorted(l, key=filenameKey)
 
 
-def utf8(s):
-	return s.encode('utf-8')
-
-
-def maybeDecode(fname):
+def maybeEncodeFilename(s):
 	if os.name == 'nt':
-		return fname.decode("utf-8")
-	return fname
+		assert isinstance(s, unicode), s
+		return s.encode("utf-8")
+	assert isinstance(s, str), s
+	return s
 
 
-def maybeEncode(s):
-	assert isinstance(s, unicode)
+def maybeDecode(s):
+	assert isinstance(s, str), s
+	if os.name == 'nt':
+		return s.decode("utf-8")
+	return s
+
+
+def maybeEncodeUni(s):
+	assert isinstance(s, unicode), s
 	if os.name == 'nt':
 		return s
 	return s.encode("utf-8")
@@ -82,9 +87,9 @@ def getNamesFromContent(s):
 
 def shouldInclude(name):
 	return name not in set([
-		maybeEncode(u".quickdired.oldnames"),
-		maybeEncode(u".quickdired.newnames"),
-		maybeEncode(u".quickdired.options"),
+		maybeEncodeUni(u".quickdired.oldnames"),
+		maybeEncodeUni(u".quickdired.newnames"),
+		maybeEncodeUni(u".quickdired.options"),
 	])
 
 
@@ -115,9 +120,9 @@ def tryMakedirs(f):
 def writeListingOrRename(deep, gui): # Note: deep may be changed below
 	f = upgradeFilepath(FilePath(os.getcwdu() if os.name == 'nt' else os.getcwd()))
 
-	oldNamesFile = f.child(maybeEncode(u".quickdired.oldnames"))
-	newNamesFile = f.child(maybeEncode(u".quickdired.newnames"))
-	optionsFile = f.child(maybeEncode(u".quickdired.options"))
+	oldNamesFile = f.child(maybeEncodeUni(u".quickdired.oldnames"))
+	newNamesFile = f.child(maybeEncodeUni(u".quickdired.newnames"))
+	optionsFile = f.child(maybeEncodeUni(u".quickdired.options"))
 
 	if oldNamesFile.isfile() and newNamesFile.isfile() and optionsFile.isfile():
 		# If both files exist, rename the files in current dir
@@ -155,13 +160,13 @@ def writeListingOrRename(deep, gui): # Note: deep may be changed below
 
 		# Create the .oldnames and .newnames files, which the
 		# user should edit, and then re-run quickdired.
-		oldNamesFile.setContent("\n".join(map(utf8, listingNames)) + "\n")
-		newNamesFile.setContent("\n".join(map(utf8, listingNames)) + "\n")
+		oldNamesFile.setContent("\n".join(map(maybeEncodeFilename, listingNames)) + "\n")
+		newNamesFile.setContent("\n".join(map(maybeEncodeFilename, listingNames)) + "\n")
 		optionsFile.setContent(json.dumps({"deep": deep}, indent=2))
 
 		if gui:
 			# Associate .newnames with whatever text editor you want
-			os.startfile(maybeEncode(u".quickdired.newnames"))
+			os.startfile(maybeEncodeUni(u".quickdired.newnames"))
 		else:
 			print "Filenames recorded; edit .quickdired.newnames and run again to rename."
 
