@@ -141,7 +141,8 @@ def writeListingOrRename(deep, gui): # Note: deep may be changed below
 			showError(gui, "Files in directory do not match .oldnames")
 			return
 		if len(oldNames) != len(newNames):
-			showError(gui, ".newnames lists %r names while .oldnames lists %r names" % (len(newNames), len(oldNames)))
+			showError(gui, ".newnames lists %r names while "
+				".oldnames lists %r names" % (len(newNames), len(oldNames)))
 			return
 
 		for i, oldName in enumerate(oldNames):
