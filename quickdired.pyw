@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 import sys
 import os
 import re
@@ -10,14 +12,17 @@ except ImportError:
 from twisted.python.filepath import FilePath
 
 
-def showError(msg):
-	import Tkinter
-	import tkMessageBox
+def showError(gui, msg):
+	if gui:
+		import Tkinter
+		import tkMessageBox
 
-	root = Tkinter.Tk()
-	root.withdraw()
+		root = Tkinter.Tk()
+		root.withdraw()
 
-	tkMessageBox.showerror("QuickDired error", msg) 
+		tkMessageBox.showerror("QuickDired error", msg)
+	else:
+		print >>sys.stderr, "Error: " + msg
 
 
 UNC_PREFIX = u"\\\\?\\"
@@ -34,7 +39,7 @@ def upgradeFilepath(f):
 	@param f: a L{FilePath} to upgrade.
 	@return: a possibly-upgraded L{FilePath}.
 	"""
-	if not f.path.startswith(UNC_PREFIX):
+	if os.name == 'nt' and not f.path.startswith(UNC_PREFIX):
 		return FilePath(absPathToUncPath(f.path))
 	return f
 
@@ -58,20 +63,33 @@ def utf8(s):
 	return s.encode('utf-8')
 
 
+def maybeDecode(fname):
+	if os.name == 'nt':
+		return fname.decode("utf-8")
+	return fname
+
+
+def maybeEncode(s):
+	assert isinstance(s, unicode)
+	if os.name == 'nt':
+		return s
+	return s.encode("utf-8")
+
+
 def getNamesFromContent(s):
-	return [name.decode("utf-8") for name in s.rstrip("\n").split("\n")]
+	return list(maybeDecode(fname) for fname in s.rstrip("\n").split("\n"))
 
 
 def shouldInclude(name):
 	return name not in set([
-		u".quickdired.oldnames",
-		u".quickdired.newnames",
-		u".quickdired.options",
+		maybeEncode(u".quickdired.oldnames"),
+		maybeEncode(u".quickdired.newnames"),
+		maybeEncode(u".quickdired.options"),
 	])
 
 
 def withoutBase(root, fp):
-	return fp.path.replace(root.path, u"", 1).lstrip(u"/\\")
+	return fp.path.replace(root.path + (u"\\" if os.name == 'nt' else "/"), "", 1)
 
 
 def getListing(root, deep):
@@ -94,12 +112,12 @@ def tryMakedirs(f):
 		pass
 
 
-def writeListingOrRename(deep): # Note: deep may be changed below
-	f = upgradeFilepath(FilePath(os.getcwdu()))
+def writeListingOrRename(deep, gui): # Note: deep may be changed below
+	f = upgradeFilepath(FilePath(os.getcwdu() if os.name == 'nt' else os.getcwd()))
 
-	oldNamesFile = f.child(u".quickdired.oldnames")
-	newNamesFile = f.child(u".quickdired.newnames")
-	optionsFile = f.child(u".quickdired.options")
+	oldNamesFile = f.child(maybeEncode(u".quickdired.oldnames"))
+	newNamesFile = f.child(maybeEncode(u".quickdired.newnames"))
+	optionsFile = f.child(maybeEncode(u".quickdired.options"))
 
 	if oldNamesFile.isfile() and newNamesFile.isfile() and optionsFile.isfile():
 		# If both files exist, rename the files in current dir
@@ -115,10 +133,10 @@ def writeListingOrRename(deep): # Note: deep may be changed below
 		if set(oldNames) != set(listingNames):
 			print "old names = ", oldNames
 			print "cur names = ", listingNames
-			showError("Files in directory do not match .oldnames")
+			showError(gui, "Files in directory do not match .oldnames")
 			return
 		if len(oldNames) != len(newNames):
-			showError(".newnames lists %r names while .oldnames lists %r names" % (len(newNames), len(oldNames)))
+			showError(gui, ".newnames lists %r names while .oldnames lists %r names" % (len(newNames), len(oldNames)))
 			return
 
 		for i, oldName in enumerate(oldNames):
@@ -130,6 +148,8 @@ def writeListingOrRename(deep): # Note: deep may be changed below
 		optionsFile.remove()
 		oldNamesFile.remove()
 		newNamesFile.remove()
+		if not gui:
+			print "Done renaming."
 	else:
 		listingNames = getListing(f, deep)
 
@@ -139,16 +159,17 @@ def writeListingOrRename(deep): # Note: deep may be changed below
 		newNamesFile.setContent("\n".join(map(utf8, listingNames)) + "\n")
 		optionsFile.setContent(json.dumps({"deep": deep}, indent=2))
 
-		# Associate .newnames with whatever text editor you want
-		os.startfile(u".quickdired.newnames")
+		if gui:
+			# Associate .newnames with whatever text editor you want
+			os.startfile(maybeEncode(u".quickdired.newnames"))
+		else:
+			print "Filenames recorded; edit .quickdired.newnames and run again to rename."
 
 
 def main():
-	try:
-		deep = sys.argv[1] == '--deep'
-	except IndexError:
-		deep = False
-	writeListingOrRename(deep)
+	deep = '--deep' in sys.argv[1:]
+	gui = '--gui' in sys.argv[1:]
+	writeListingOrRename(deep, gui)
 
 
 if __name__ == '__main__':
