@@ -125,7 +125,7 @@ def writeListingOrRename(deep, gui): # Note: deep may be changed below
 	optionsFile = f.child(maybeEncodeUni(u".quickdired.options"))
 
 	if oldNamesFile.isfile() and newNamesFile.isfile() and optionsFile.isfile():
-		# If both files exist, rename the files in current dir
+		# If all files exist, rename the files in current dir
 		oldNames = getNamesFromContent(oldNamesFile.getContent())
 		newNames = getNamesFromContent(newNamesFile.getContent())
 		options = json.loads(optionsFile.getContent())
