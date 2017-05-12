@@ -144,6 +144,9 @@ def writeListingOrRename(deep, gui): # Note: deep may be changed below
 			showError(gui, ".newnames lists %r names while "
 				".oldnames lists %r names" % (len(newNames), len(oldNames)))
 			return
+		if len(newNames) != len(set(newNames)):
+			showError(gui, ".newnames has at least one non-unique name")
+			return
 
 		for i, oldName in enumerate(oldNames):
 			newName = newNames[i]
