@@ -1,185 +1,115 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 import sys
 import os
 import re
+import json
 
-try:
-	from simplejson import json
-except ImportError:
-	import json
-
-from twisted.python.filepath import FilePath
+from pathlib import Path
 
 
-def showError(gui, msg):
-	if gui:
-		import Tkinter
-		import tkMessageBox
-
-		root = Tkinter.Tk()
-		root.withdraw()
-
-		tkMessageBox.showerror("QuickDired error", msg)
-	else:
-		print >>sys.stderr, "Error: " + msg
-
-
-UNC_PREFIX = u"\\\\?\\"
-
-def absPathToUncPath(p):
-	r"""
-	See http://msdn.microsoft.com/en-us/library/aa365247%28v=vs.85%29.aspx#maxpath
-	"""
-	return UNC_PREFIX + p
-
-
-def upgradeFilepath(f):
-	r"""
-	@param f: a L{FilePath} to upgrade.
-	@return: a possibly-upgraded L{FilePath}.
-	"""
-	if os.name == 'nt' and not f.path.startswith(UNC_PREFIX):
-		return FilePath(absPathToUncPath(f.path))
-	return f
-
-
-def tryInt(s):
+def try_int(s):
 	try:
 		return int(s)
 	except:
 		return s
 
 
-def filenameKey(s):
-	return tuple(tryInt(c) for c in re.split('([0-9]+)', s))
+def filename_key(path):
+	return tuple(try_int(c) for c in re.split("([0-9]+)", str(path)))
 
 
-def sortNicely(l):
-	return sorted(l, key=filenameKey)
+def sorted_nicely(paths):
+	return sorted(paths, key=filename_key)
 
 
-def maybeEncodeFilename(s):
-	if os.name == 'nt':
-		assert isinstance(s, unicode), s
-		return s.encode("utf-8")
-	assert isinstance(s, str), s
-	return s
+def get_names_from_content(s):
+	return list(fname for fname in s.rstrip("\n").split("\n"))
 
 
-def maybeDecode(s):
-	assert isinstance(s, str), s
-	if os.name == 'nt':
-		return s.decode("utf-8")
-	return s
-
-
-def maybeEncodeUni(s):
-	assert isinstance(s, unicode), s
-	if os.name == 'nt':
-		return s
-	return s.encode("utf-8")
-
-
-def getNamesFromContent(s):
-	return list(maybeDecode(fname) for fname in s.rstrip("\n").split("\n"))
-
-
-def shouldInclude(name):
-	return name not in set([
-		maybeEncodeUni(u".quickdired.oldnames"),
-		maybeEncodeUni(u".quickdired.newnames"),
-		maybeEncodeUni(u".quickdired.options"),
+def should_include(path):
+	return path.name not in set([
+		".quickdired.oldnames",
+		".quickdired.newnames",
+		".quickdired.options",
 	])
 
 
-def withoutBase(root, fp):
-	return fp.path.replace(root.path + (u"\\" if os.name == 'nt' else "/"), "", 1)
+def without_base(root, fp):
+	return str(fp).replace(str(root) + "/", "", 1)
 
 
-def getListing(root, deep):
+def get_listing(root, deep):
 	if not deep:
-		return sortNicely(filter(shouldInclude, os.listdir(root.path)))
+		paths = sorted_nicely(filter(should_include, root.iterdir()))
 	else:
-		return sortNicely(map(
-			lambda fp: withoutBase(root, fp),
+		paths = sorted_nicely(map(
+			lambda fp: without_base(root, fp),
 			filter(
 				# --deep does not support renaming directories
-				lambda fp: not fp.isdir() and shouldInclude(fp.basename()),
-				root.walk()
+				lambda fp: not fp.is_dir() and should_include(fp),
+				root.rglob("*")
 			)))
 
-
-def tryMakedirs(f):
-	try:
-		os.makedirs(f)
-	except OSError:
-		pass
+	return list(map(lambda path: str(path), paths))
 
 
-def writeListingOrRename(deep, gui): # Note: deep may be changed below
-	f = upgradeFilepath(FilePath(os.getcwdu() if os.name == 'nt' else os.getcwd()))
+def write_listing_or_rename(deep):
+	f = Path(os.getcwd())
 
-	oldNamesFile = f.child(maybeEncodeUni(u".quickdired.oldnames"))
-	newNamesFile = f.child(maybeEncodeUni(u".quickdired.newnames"))
-	optionsFile = f.child(maybeEncodeUni(u".quickdired.options"))
+	old_names_file = f.joinpath(".quickdired.oldnames")
+	new_names_file = f.joinpath(".quickdired.newnames")
+	options_file   = f.joinpath(".quickdired.options")
 
-	if oldNamesFile.isfile() and newNamesFile.isfile() and optionsFile.isfile():
+	if old_names_file.is_file() and new_names_file.is_file() and options_file.is_file():
 		# If all files exist, rename the files in current dir
-		oldNames = getNamesFromContent(oldNamesFile.getContent())
-		newNames = getNamesFromContent(newNamesFile.getContent())
-		options = json.loads(optionsFile.getContent())
-		if options['deep']:
+		old_names = get_names_from_content(old_names_file.read_text())
+		new_names = get_names_from_content(new_names_file.read_text())
+		options   = json.loads(options_file.read_text())
+		if options["deep"]:
 			# Even if no --deep, assume deep if .options says deep: true
 			deep = True
 
-		listingNames = getListing(f, deep)
+		listing_names = get_listing(f, deep)
 
-		if set(oldNames) != set(listingNames):
-			print "old names = ", oldNames
-			print "cur names = ", listingNames
-			showError(gui, "Files in directory do not match .oldnames")
+		if set(old_names) != set(listing_names):
+			print("old names = ", old_names)
+			print("cur names = ", listing_names)
+			print("Files in directory do not match .oldnames", file=sys.stderr)
 			return
-		if len(oldNames) != len(newNames):
-			showError(gui, ".newnames lists %r names while "
-				".oldnames lists %r names" % (len(newNames), len(oldNames)))
+		if len(old_names) != len(new_names):
+			print(f".newnames lists {len(new_names)} names while .oldnames lists {len(old_names)} names", file=sys.stderr)
 			return
-		if len(newNames) != len(set(newNames)):
-			showError(gui, ".newnames has at least one non-unique name")
+		if len(new_names) != len(set(new_names)):
+			print(".newnames has at least one non-unique name", file=sys.stderr)
 			return
 
-		for i, oldName in enumerate(oldNames):
-			newName = newNames[i]
-			if '/' in newName:
-				tryMakedirs(newName.rsplit('/', 1)[0])
-			os.rename(oldName, newName)
-		
-		optionsFile.remove()
-		oldNamesFile.remove()
-		newNamesFile.remove()
-		if not gui:
-			print "Done renaming."
+		for i, old_name in enumerate(old_names):
+			new_name = new_names[i]
+			if new_name != old_name:
+				if "/" in new_name:
+					os.makedirs(new_name.rsplit("/", 1)[0], exist_ok=True)
+				os.rename(old_name, new_name)
+
+		options_file.unlink()
+		old_names_file.unlink()
+		new_names_file.unlink()
+		print("Done renaming.")
 	else:
-		listingNames = getListing(f, deep)
+		listing_names = get_listing(f, deep)
 
 		# Create the .oldnames and .newnames files, which the
 		# user should edit, and then re-run quickdired.
-		oldNamesFile.setContent("\n".join(map(maybeEncodeFilename, listingNames)) + "\n")
-		newNamesFile.setContent("\n".join(map(maybeEncodeFilename, listingNames)) + "\n")
-		optionsFile.setContent(json.dumps({"deep": deep}, indent=2))
-
-		if gui:
-			# Associate .newnames with whatever text editor you want
-			os.startfile(maybeEncodeUni(u".quickdired.newnames"))
-		else:
-			print "Filenames recorded; edit .quickdired.newnames and run again to rename."
+		old_names_file.write_text("\n".join(listing_names) + "\n")
+		new_names_file.write_text("\n".join(listing_names) + "\n")
+		options_file.write_text(json.dumps({"deep": deep}, indent=2))
+		print("Filenames recorded; edit .quickdired.newnames and run again to rename.")
 
 
 def main():
-	deep = '--deep' in sys.argv[1:]
-	gui = '--gui' in sys.argv[1:]
-	writeListingOrRename(deep, gui)
+	deep = "--deep" in sys.argv[1:]
+	write_listing_or_rename(deep)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 	main()
