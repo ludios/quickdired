@@ -35,23 +35,19 @@ def should_include(path):
 	])
 
 
-def without_base(root, fp):
-	return str(fp).replace(str(root) + "/", "", 1)
+def without_base(root, p):
+	return str(p).replace(str(root) + "/", "", 1)
 
 
 def get_listing(root, deep):
 	if not deep:
-		paths = sorted_nicely(filter(should_include, root.iterdir()))
+		file_children = [without_base(root, p) for p in root.iterdir() if should_include(p)]
+		return sorted_nicely(file_children)
 	else:
-		paths = sorted_nicely(map(
-			lambda fp: without_base(root, fp),
-			filter(
-				# --deep does not support renaming directories
-				lambda fp: not fp.is_dir() and should_include(fp),
-				root.rglob("*")
-			)))
-
-	return list(map(lambda path: str(path), paths))
+		all_children  = root.rglob("*")
+		# --deep does not support renaming directories
+		file_children = [without_base(root, p) for p in all_children if not p.is_dir() and should_include(p)]
+		return sorted_nicely(file_children)
 
 
 def write_listing_or_rename(deep):
