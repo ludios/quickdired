@@ -7,8 +7,8 @@ except ImportError:
 
 setup(
 	name="quickdired",
-	version="2.0.0",
-	description="Rename files by generating a file listing and applying changes after edits",
+	version="2.0.1",
+	description="File rename utility that generates a file listing and applies changes after edits",
 	url="https://github.com/ludios/quickdired",
 	author="Ivan Kozik",
 	author_email="ivan@ludios.org",
